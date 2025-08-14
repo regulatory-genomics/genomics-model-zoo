@@ -4,7 +4,12 @@ version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.10, <3.13"
-dependencies = []
+dependencies = [
+    "einops>=0.8.1",
+    "pooch>=1.8.2",
+    "torch>=2.7.1",
+    "tqdm>=4.67.1",
+]
 
 [build-system]
 requires = ["setuptools>=70.0.0"]

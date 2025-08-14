@@ -15,12 +15,21 @@ from dataclasses import field
 # solution came from @johahi
 from importlib.resources import files
 TF_GAMMAS = torch.load(
-    files('regbench.data').joinpath('tf_gammas.pt'),
+    files('genomics_models.data').joinpath('tf_gammas.pt'),
     weights_only=True
 )
 
+def fetch_model_file():
+    from pooch import retrieve
+    return retrieve(
+        "https://modelscope.cn/models/regulatory-genomics-lab/Enformer/resolve/master/enformer.bin",
+        known_hash=None,
+        fname="enformer.bin",
+        progressbar=True,
+    )
+
 class EnformerTrunk(nn.Module): 
-    def __init__(self, path):
+    def __init__(self, path: Path | None = None):
         super().__init__()
         self.enformer = fetch_pretrained(path)
         self.input_length = 196_608
@@ -36,10 +45,13 @@ class EnformerTrunk(nn.Module):
     def forward(self, x):
         return self.get_emb(x)
 
-def fetch_pretrained(path) -> 'Enformer':
+def fetch_pretrained(path: Path | None = None) -> 'Enformer':
     config = EnformerConfig()
     config.use_tf_gamma = True  # default to using tensorflow gamma positions
     model = Enformer(config)
+
+    if path is None:
+        path = fetch_model_file()
     state_dict = torch.load(path)
     model.load_state_dict(state_dict)
     return model
