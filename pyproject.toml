@@ -18,8 +18,15 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools]
 include-package-data = true
 
+[tool.setuptools.package-dir]
+"" = "src"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["genomics_models*"]
+
 [tool.setuptools.package-data]
-genomics_model_zoo = ["data/tf_gammas.pt"]
+genomics_models = ["data/tf_gammas.pt"]
 
 [[tool.uv.index]]
 name = "westlake"
