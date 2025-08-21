@@ -7,8 +7,9 @@ import torch.distributed as dist
 from torch.utils.checkpoint import checkpoint_sequential
 from einops import rearrange
 from einops.layers.torch import Rearrange
-from dataclasses import dataclass
-from dataclasses import field
+from dataclasses import dataclass, field
+
+from .utils import seq_indices_to_one_hot
 
 # gamma positions from tensorflow
 # addressing a difference between xlogy results from tensorflow and pytorch
@@ -23,7 +24,7 @@ def fetch_model_file():
     from pooch import retrieve
     return retrieve(
         "https://modelscope.cn/models/regulatory-genomics-lab/Enformer/resolve/master/enformer.bin",
-        known_hash=None,
+        known_hash="sha256:99b09d602e195d89c7d4debe144bb2f43907ba0d74006e97098e99d9171c439c",
         fname="enformer.bin",
         progressbar=True,
     )
@@ -35,6 +36,7 @@ class EnformerTrunk(nn.Module):
         self.input_length = 196_608
         self.output_length = 114_688
         self.output_resolution = 128
+        self.emb_dim = 1536 * 2
     
     def get_emb(self, x):
         if not torch.is_floating_point(x):
@@ -506,11 +508,3 @@ class Enformer(nn.Module):
             return out, x
 
         return out
-
-def seq_indices_to_one_hot(t, padding = -1):
-    is_padding = t == padding
-    t = t.clamp(min = 0)
-    one_hot = F.one_hot(t, num_classes = 5)
-    out = one_hot[..., :4].float()
-    out = out.masked_fill(is_padding[..., None], 0.25)
-    return out
