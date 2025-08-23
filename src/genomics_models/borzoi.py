@@ -38,6 +38,7 @@ class BorzoiTrunk(nn.Module):
         if not torch.is_floating_point(x):
             x = seq_indices_to_one_hot(x)
 
+        x = x.permute(0, 2, 1)  # (B, 4, L)
         x = self.borzoi.get_embs_after_crop(x)
         x = self.borzoi.final_joined_convs(x)
         return x

@@ -29,6 +29,5 @@ include = ["genomics_models*"]
 genomics_models = ["data/tf_gammas.pt"]
 
 [[tool.uv.index]]
-name = "westlake"
-url = "https://mirrors.westlake.edu.cn/pypi/simple"
+url = "https://pypi.tuna.tsinghua.edu.cn/simple"
 default = true
