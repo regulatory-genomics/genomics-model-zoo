@@ -16,6 +16,7 @@
 
 import torch
 from torch import nn, einsum
+from torch.amp import autocast
 import math
 import copy
 from einops import rearrange
@@ -39,8 +40,10 @@ class BorzoiTrunk(nn.Module):
             x = seq_indices_to_one_hot(x)
 
         x = x.permute(0, 2, 1)  # (B, 4, L)
-        x = self.borzoi.get_embs_after_crop(x)
-        x = self.borzoi.final_joined_convs(x)
+
+        with autocast(device_type='cuda', dtype=torch.bfloat16):
+            x = self.borzoi.get_embs_after_crop(x)
+            x = self.borzoi.final_joined_convs(x)
         return x
 
 
