@@ -10,6 +10,7 @@ from einops.layers.torch import Rearrange
 from dataclasses import dataclass, field
 
 from .utils import seq_indices_to_one_hot
+from .base import EpigenomicsModel
 
 # gamma positions from tensorflow
 # addressing a difference between xlogy results from tensorflow and pytorch
@@ -20,43 +21,58 @@ TF_GAMMAS = torch.load(
     weights_only=True
 )
 
-def fetch_model_file():
-    from pooch import retrieve
-    return retrieve(
-        "https://modelscope.cn/models/regulatory-genomics-lab/Enformer/resolve/master/enformer.bin",
-        known_hash="sha256:99b09d602e195d89c7d4debe144bb2f43907ba0d74006e97098e99d9171c439c",
-        fname="enformer.bin",
-        progressbar=True,
-    )
-
-class EnformerTrunk(nn.Module): 
-    def __init__(self, path: Path | None = None):
+class EnformerTrunk(EpigenomicsModel): 
+    def __init__(self, model):
         super().__init__()
-        self.enformer = fetch_pretrained(path)
-        self.input_length = 196_608
-        self.output_length = 114_688
-        self.output_resolution = 128
-        self.emb_dim = 1536 * 2
+        self._model = model
+        self._input_length = 196_608
+        self._output_length = 114_688
+        self._output_resolution = 128
+        self._output_dim = 1536 * 2
     
-    def get_emb(self, x):
-        if not torch.is_floating_point(x):
-            x = seq_indices_to_one_hot(x)
-        _, embeddings = self.enformer(x, return_embeddings=True)
-        return embeddings
+    @property
+    def base_model(self) -> nn.Module:
+        return self._model
+
+    @property
+    def input_length(self) -> int:
+        return self._input_length
+
+    @property
+    def output_length(self) -> int:
+        return self._output_length
+
+    @property
+    def output_resolution(self) -> int:
+        return self._output_resolution
+
+    @property
+    def output_dim(self) -> int:
+        return self._output_dim
     
     def forward(self, x):
-        return self.get_emb(x)
+        if not torch.is_floating_point(x):
+            x = seq_indices_to_one_hot(x)
+        return self._model._trunk(x)
 
-def fetch_pretrained(path: Path | None = None) -> 'Enformer':
-    config = EnformerConfig()
-    config.use_tf_gamma = True  # default to using tensorflow gamma positions
-    model = Enformer(config)
+    @classmethod
+    def from_pretrained(cls, path: Path | None = None) -> "EnformerTrunk":
+        from pooch import retrieve
 
-    if path is None:
-        path = fetch_model_file()
-    state_dict = torch.load(path)
-    model.load_state_dict(state_dict)
-    return model
+        config = EnformerConfig()
+        config.use_tf_gamma = True  # default to using tensorflow gamma positions
+        model = Enformer(config)
+
+        if path is None:
+            path = retrieve(
+                "https://modelscope.cn/models/regulatory-genomics-lab/Enformer/resolve/master/enformer.bin",
+                known_hash="sha256:99b09d602e195d89c7d4debe144bb2f43907ba0d74006e97098e99d9171c439c",
+                fname="enformer.bin",
+                progressbar=True,
+            )
+        state_dict = torch.load(path)
+        model.load_state_dict(state_dict)
+        return EnformerTrunk(model)
 
 @dataclass
 class EnformerConfig:

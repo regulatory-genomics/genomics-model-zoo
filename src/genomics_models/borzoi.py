@@ -24,16 +24,37 @@ from pathlib import Path
 from dataclasses import dataclass
 
 from .utils import seq_indices_to_one_hot
+from .base import EpigenomicsModel
 
 
-class BorzoiTrunk(nn.Module):
-    def __init__(self, path: Path | None = None):
+class BorzoiTrunk(EpigenomicsModel):
+    def __init__(self, model):
         super().__init__()
-        self.borzoi = fetch_pretrained(path)
-        self.input_length = 524_288
-        self.output_length = 196_608
-        self.output_resolution = 32
-        self.emb_dim = 1920
+        self._model = model
+        self._input_length = 524_288
+        self._output_length = 196_608
+        self._output_resolution = 32
+        self._output_dim = 1920
+
+    @property
+    def base_model(self) -> nn.Module:
+        return self._model
+
+    @property
+    def input_length(self) -> int:
+        return self._input_length
+
+    @property
+    def output_length(self) -> int:
+        return self._output_length
+
+    @property
+    def output_resolution(self) -> int:
+        return self._output_resolution
+
+    @property
+    def output_dim(self) -> int:
+        return self._output_dim
 
     def forward(self, x):
         if not torch.is_floating_point(x):
@@ -41,30 +62,30 @@ class BorzoiTrunk(nn.Module):
 
         x = x.permute(0, 2, 1)  # (B, 4, L)
         with autocast(device_type='cuda', dtype=torch.bfloat16):
-            x = self.borzoi.get_embs_after_crop(x)
-            x = self.borzoi.final_joined_convs(x)
+            x = self._model.get_embs_after_crop(x)
+            x = self._model.final_joined_convs(x)
         x = x.permute(0, 2, 1)  # (B, L, C)
         return x
 
+    @classmethod
+    def from_pretrained(cls, path: Path | None = None) -> "BorzoiTrunk":
+        from pooch import retrieve
 
-def fetch_pretrained(path: Path | None = None) -> "Borzoi":
-    from pooch import retrieve
-
-    config = BorzoiConfig()
-    model = Borzoi(config)
-    if path is None:
-        path = retrieve(
-            "https://www.modelscope.cn/models/regulatory-genomics-lab/Borzoi/resolve/master/pytorch_model.bin",
-            known_hash="sha256:16dbb77387b2531d87669cc5d61b14a9918d48835be768aaa5b5d9a13cde7ec3",
-            fname="borzoi.bin",
-            progressbar=True,
-        )
-    if torch.cuda.is_available():
-        state_dict = torch.load(path)
-    else:
-        state_dict = torch.load(path, map_location=torch.device("cpu"))
-    model.load_state_dict(state_dict)
-    return model
+        config = BorzoiConfig()
+        model = Borzoi(config)
+        if path is None:
+            path = retrieve(
+                "https://www.modelscope.cn/models/regulatory-genomics-lab/Borzoi/resolve/master/pytorch_model.bin",
+                known_hash="sha256:16dbb77387b2531d87669cc5d61b14a9918d48835be768aaa5b5d9a13cde7ec3",
+                fname="borzoi.bin",
+                progressbar=True,
+            )
+        if torch.cuda.is_available():
+            state_dict = torch.load(path)
+        else:
+            state_dict = torch.load(path, map_location=torch.device("cpu"))
+        model.load_state_dict(state_dict)
+        return BorzoiTrunk(model)
 
 
 @dataclass
