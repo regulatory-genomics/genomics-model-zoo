@@ -50,7 +50,8 @@ class EnformerTrunk(EpigenomicsModel):
     def output_dim(self) -> int:
         return self._output_dim
     
-    def forward(self, x):
+    def forward(self, input_ids, **kwargs):
+        x = input_ids
         if not torch.is_floating_point(x):
             x = seq_indices_to_one_hot(x)
         return self._model._trunk(x)

@@ -31,8 +31,8 @@ class BorzoiTrunk(EpigenomicsModel):
     def __init__(self, model):
         super().__init__()
         self._model = model
-        self._input_length = 524_288
-        self._output_length = 196_608
+        self._input_length = 524288
+        self._output_length = 196608
         self._output_resolution = 32
         self._output_dim = 1920
 
@@ -56,16 +56,29 @@ class BorzoiTrunk(EpigenomicsModel):
     def output_dim(self) -> int:
         return self._output_dim
 
-    def forward(self, x):
+    def forward(self, input_ids, return_embedding=False, only_return_embedding=True, **kwargs):
+        x = input_ids
         if not torch.is_floating_point(x):
             x = seq_indices_to_one_hot(x)
-
-        x = x.permute(0, 2, 1)  # (B, 4, L)
+        if x.shape[-2] != 4:
+            x = x.permute(0, 2, 1)  # (B, 4, L)
         with autocast(device_type='cuda', dtype=torch.bfloat16):
             x = self._model.get_embs_after_crop(x)
             x = self._model.final_joined_convs(x)
+            if return_embedding:
+                if only_return_embedding:
+                    return x
+                emb = x
+            # x = self._model.final_joined_convs(x)
         x = x.permute(0, 2, 1)  # (B, L, C)
+        if return_embedding:
+            return x, emb
         return x
+
+    def predict_track(self, x):
+        x = x.permute(0, 2, 1)
+        x = self._model.final_softplus(self._model.human_head(x.float()))
+        return x.permute(0, 2, 1)
 
     @classmethod
     def from_pretrained(cls, path: Path | None = None) -> "BorzoiTrunk":
@@ -316,7 +329,7 @@ class Borzoi(nn.Module):
             conved_slices = undo_squashed_scale(conved_slices)
         return conved_slices, slice_length
 
-    def forward(self, x, is_human=True, data_parallel_training=False):
+    def forward(self, x, is_human=True, data_parallel_training=False, return_embedding=False):
         """
         Performs the forward pass of the model.
 
@@ -329,28 +342,20 @@ class Borzoi(nn.Module):
             torch.Tensor: Output tensor with shape (N, C, L), where C is the number of tracks.
         """
         x = self.get_embs_after_crop(x)
+        if return_embedding:
+            emb = x
         x = self.final_joined_convs(x)
+
         # disable autocast for more precision in final layer
         with torch.amp.autocast("cuda", enabled=False):
-            if data_parallel_training:
-                # we need this to get gradients for both heads if doing DDP training
-                if is_human:
-                    human_out = (
-                        self.final_softplus(self.human_head(x.float()))
-                        + 0 * self.mouse_head(x.float()).sum()
-                    )
-                    return human_out
-                else:
-                    mouse_out = (
-                        self.final_softplus(self.mouse_head(x.float()))
-                        + 0 * self.human_head(x.float()).sum()
-                    )
-                    return mouse_out
+            if is_human:
+                if return_embedding:
+                    return self.final_softplus(self.human_head(x.float())), emb
+                return self.final_softplus(self.human_head(x.float()))
             else:
-                if is_human:
-                    return self.final_softplus(self.human_head(x.float()))
-                else:
-                    return self.final_softplus(self.mouse_head(x.float()))
+                if return_embedding:
+                    return self.final_softplus(self.mouse_head(x.float())), emb
+                return self.final_softplus(self.mouse_head(x.float()))
 
 
 class ConvDna(nn.Module):
