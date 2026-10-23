@@ -11,7 +11,7 @@ from .utils import seq_indices_to_one_hot
 from .base import EpigenomicsModel
 
 
-class BorzoiTrunk(EpigenomicsModel):
+class AlphaGeminiTrunk(EpigenomicsModel):
     def __init__(self, model):
         super().__init__()
         self._model = model
@@ -65,16 +65,16 @@ class BorzoiTrunk(EpigenomicsModel):
         return x.permute(0, 2, 1)
 
     @classmethod
-    def from_pretrained(cls, path: Path | None = None) -> "BorzoiTrunk":
+    def from_pretrained(cls, path: Path | None = None) -> "AlphaGeminiTrunk":
         from pooch import retrieve
 
-        config = BorzoiConfig()
-        model = Borzoi(config)
+        config = AlphaGeminiConfig()
+        model = AlphaGemini(config)
         if path is None:
             path = retrieve(
                 "https://www.modelscope.cn/models/regulatory-genomics-lab/Borzoi/resolve/master/pytorch_model.bin",
                 known_hash="sha256:16dbb77387b2531d87669cc5d61b14a9918d48835be768aaa5b5d9a13cde7ec3",
-                fname="borzoi.bin",
+                fname="alphagemini.bin",
                 progressbar=True,
             )
         if torch.cuda.is_available():
@@ -83,11 +83,11 @@ class BorzoiTrunk(EpigenomicsModel):
             state_dict = torch.load(path, map_location=torch.device("cpu"))
         load_out = model.load_state_dict(state_dict, strict=False)
         print(load_out)
-        return BorzoiTrunk(model)
+        return AlphaGeminiTrunk(model)
 
 
 @dataclass
-class BorzoiConfig:
+class AlphaGeminiConfig:
     dim: int = 1536
     depth: int = 8
     heads: int = 8
@@ -100,7 +100,7 @@ class BorzoiConfig:
     flashed: bool = True
 
 
-class Borzoi(nn.Module):
+class AlphaGemini(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.flashed = config.flashed if "flashed" in config.__dict__.keys() else False

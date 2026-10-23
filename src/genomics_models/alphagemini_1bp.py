@@ -12,13 +12,13 @@ from .utils import seq_indices_to_one_hot
 from .base import EpigenomicsModel
 
 
-class BorzoiTrunk(EpigenomicsModel):
-    """Borzoi trunk with 1bp resolution output via a learned U-Net decoder.
+class AlphaGeminiTrunk(EpigenomicsModel):
+    """AlphaGemini trunk with 1bp resolution output via a learned U-Net decoder.
 
-    The pretrained Borzoi encoder + transformer + 32bp U-Net are kept intact.
-    A new ``Borzoi1bpDecoder`` progressively upsamples from 32bp to 1bp using
+    The pretrained AlphaGemini encoder + transformer + 32bp U-Net are kept intact.
+    A new ``AlphaGemini1bpDecoder`` progressively upsamples from 32bp to 1bp using
     skip connections captured from the encoder at 16bp / 8bp / 4bp / 2bp / 1bp.
-    Only the decoder parameters are new; all original Borzoi weights load unchanged.
+    Only the decoder parameters are new; all original AlphaGemini weights load unchanged.
     """
 
     def __init__(self, model, output_dim=1920):
@@ -29,7 +29,7 @@ class BorzoiTrunk(EpigenomicsModel):
         self._model.crop.target_length = -1
         self._output_resolution = 1
         self._output_dim = output_dim
-        self.decoder_1bp = Borzoi1bpDecoder(output_dim=output_dim)
+        self.decoder_1bp = AlphaGemini1bpDecoder(output_dim=output_dim)
         self.embed_128bp = nn.Sequential(
             ConvBlock(1536, output_dim, kernel_size=1),
             nn.Dropout(0.1),
@@ -66,7 +66,7 @@ class BorzoiTrunk(EpigenomicsModel):
     # ------------------------------------------------------------------
 
     def _get_encoder_intermediates(self, x):
-        """Run the Borzoi encoder step-by-step and capture skip features.
+        """Run the AlphaGemini encoder step-by-step and capture skip features.
 
         Intermediate resolutions captured (for input length L):
             1bp  – conv_dna.conv_layer output  (512, L)
@@ -129,7 +129,7 @@ class BorzoiTrunk(EpigenomicsModel):
             # --- encoder: capture multi-scale intermediates ---
             x_unet0, intermediates = self._get_encoder_intermediates(x)
 
-            # --- original Borzoi 32bp path (transformer + U-Net) ---
+            # --- original AlphaGemini 32bp path (transformer + U-Net) ---
             model = self._model
             x_unet1 = model.unet1(x_unet0)
             x = model._max_pool(x_unet1)
@@ -182,7 +182,7 @@ class BorzoiTrunk(EpigenomicsModel):
     def forward_128bp(self, input_ids, return_embedding=False, only_return_embedding=True, **kwargs):
         """128bp resolution forward pass using the transformer output directly.
 
-        The Borzoi transformer operates at 128bp natively, so this method
+        The AlphaGemini transformer operates at 128bp natively, so this method
         bypasses the expensive U-Net decoder entirely.
 
         Returns:
@@ -277,7 +277,7 @@ class BorzoiTrunk(EpigenomicsModel):
         }
 
     def predict_track(self, x):
-        """Predict tracks via the original Borzoi human head (operates at 32bp).
+        """Predict tracks via the original AlphaGemini human head (operates at 32bp).
 
         Use with output from ``forward_32bp``, **not** from ``forward``.
         """
@@ -286,16 +286,16 @@ class BorzoiTrunk(EpigenomicsModel):
         return x.permute(0, 2, 1)
 
     @classmethod
-    def from_pretrained(cls, path: Path | None = None, output_dim: int = 1920) -> "BorzoiTrunk":
+    def from_pretrained(cls, path: Path | None = None, output_dim: int = 1920) -> "AlphaGeminiTrunk":
         from pooch import retrieve
 
-        config = BorzoiConfig()
-        model = Borzoi(config)
+        config = AlphaGeminiConfig()
+        model = AlphaGemini(config)
         if path is None:
             path = retrieve(
                 "https://www.modelscope.cn/models/regulatory-genomics-lab/Borzoi/resolve/master/pytorch_model.bin",
                 known_hash="sha256:16dbb77387b2531d87669cc5d61b14a9918d48835be768aaa5b5d9a13cde7ec3",
-                fname="borzoi.bin",
+                fname="alphagemini.bin",
                 progressbar=True,
             )
         if torch.cuda.is_available():
@@ -303,11 +303,11 @@ class BorzoiTrunk(EpigenomicsModel):
         else:
             state_dict = torch.load(path, map_location=torch.device("cpu"))
         model.load_state_dict(state_dict)
-        return BorzoiTrunk(model, output_dim=output_dim)
+        return AlphaGeminiTrunk(model, output_dim=output_dim)
 
 
 @dataclass
-class BorzoiConfig:
+class AlphaGeminiConfig:
     dim: int = 1536
     depth: int = 8
     heads: int = 8
@@ -322,7 +322,7 @@ class BorzoiConfig:
     flashed: bool = True
 
 
-class Borzoi(nn.Module):
+class AlphaGemini(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.flashed = config.flashed if "flashed" in config.__dict__.keys() else False
@@ -416,7 +416,7 @@ class Borzoi(nn.Module):
         if config.return_center_bins_only:
             self.crop = TargetLengthCrop(config.bins_to_return)
         else:
-            self.crop = TargetLengthCrop(16384 - 32)  # as in Borzoi
+            self.crop = TargetLengthCrop(16384 - 32)  # as in AlphaGemini
         self.final_joined_convs = nn.Sequential(
             ConvBlock(in_channels=config.dim, out_channels=1920, kernel_size=1),
             nn.Dropout(0.1),
@@ -626,8 +626,8 @@ class UpBlock(nn.Module):
         return out + self.conv_out(out)
 
 
-class Borzoi1bpDecoder(nn.Module):
-    """Decoder that upsamples Borzoi 32bp features to 1bp using U-Net skip connections.
+class AlphaGemini1bpDecoder(nn.Module):
+    """Decoder that upsamples AlphaGemini 32bp features to 1bp using U-Net skip connections.
 
     Channel progression mirrors the encoder pyramid in reverse:
         32bp (1536) → 16bp (1056) → 8bp (896) → 4bp (736) → 2bp (608) → 1bp (512)
